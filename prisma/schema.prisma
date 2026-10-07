@@ -32,3 +32,89 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+//model for event
+
+model Event {
+  id          String   @id @default(cuid())
+  shop        String
+  name        String
+  eventType   String
+  startAt     DateTime
+  endAt       DateTime?
+  cost        Float    @default(0)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  attendees   EventAttendee[]
+  attributions Attribution[]
+}
+
+//model for customer
+
+model Customer {
+  id                 String   @id @default(cuid())
+  shop               String
+  shopifyCustomerId  String
+  email              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  attendees           EventAttendee[]
+  orders              Order[]
+  attributions        Attribution[]
+
+  @@unique([shop, shopifyCustomerId])
+}
+
+//model for attendee
+
+model EventAttendee {
+  id           String   @id @default(cuid())
+  eventId      String
+  customerId   String
+  registeredAt DateTime @default(now())
+  attended     Boolean  @default(false)
+
+  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, customerId])
+}
+
+//model for order
+model Order {
+  id                String   @id @default(cuid())
+  shop              String
+  shopifyOrderId    String
+  customerId        String?
+  orderDate         DateTime
+  total             Float
+  currency          String
+  createdAt         DateTime @default(now())
+
+  customer          Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  attributions      Attribution[]
+
+  @@unique([shop, shopifyOrderId])
+}
+//model for attribution
+model Attribution {
+  id                 String   @id @default(cuid())
+  eventId            String
+  customerId         String
+  orderId            String
+  attributionType    String
+  windowDays         Int?
+  attributedRevenue  Float
+  createdAt          DateTime @default(now())
+
+  event              Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  customer           Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  order              Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([customerId])
+  @@index([orderId])
+}
