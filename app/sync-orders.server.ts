@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { orderValues, ordersQuery, type RemoteOrder } from "./order-sync.server.ts";
+import { normalizedEmail } from "./customer-identity.server.ts";
 type Admin = { graphql: (query: string, options: { variables: { after: string | null; query: string } }) => Promise<Response> };
 const active = new Map<string, Promise<{ message: string }>>();
 
@@ -35,11 +36,13 @@ export async function syncOrders(db: PrismaClient, admin: Admin, shop: string, s
     await db.$transaction(async (transaction) => {
       const customers = new Map<string, string>();
       for (const remoteId of new Set(orders.flatMap((order) => order.customer ? [order.customer.id] : []))) {
-        const customer = await transaction.customer.upsert({ where: { shop_shopifyCustomerId: { shop, shopifyCustomerId: remoteId } }, create: { shop, shopifyCustomerId: remoteId }, update: {} });
+        const remoteOrders = orders.filter((order) => order.customer?.id === remoteId);
+        const email = normalizedEmail(remoteOrders.find((order) => order.customer?.defaultEmailAddress?.emailAddress)?.customer?.defaultEmailAddress?.emailAddress) ?? normalizedEmail(remoteOrders.find((order) => order.email)?.email);
+        const customer = await transaction.customer.upsert({ where: { shop_shopifyCustomerId: { shop, shopifyCustomerId: remoteId } }, create: { shop, shopifyCustomerId: remoteId, email }, update: email ? { email } : {} });
         customers.set(remoteId, customer.id);
       }
       for (const order of orders) {
-        const values = { ...orderValues(order), customerId: order.customer ? customers.get(order.customer.id) ?? null : null };
+        const values = { ...orderValues(order), email: normalizedEmail(order.email) ?? normalizedEmail(order.customer?.defaultEmailAddress?.emailAddress), customerId: order.customer ? customers.get(order.customer.id) ?? null : null };
         await transaction.order.upsert({ where: { shop_shopifyOrderId: { shop, shopifyOrderId: order.id } }, create: { shop, shopifyOrderId: order.id, ...values }, update: values });
       }
       await transaction.orderSyncState.upsert({ where: { shop }, create: { shop, lastSuccessAt: started, fullHistory }, update: { lastSuccessAt: started, fullHistory } });

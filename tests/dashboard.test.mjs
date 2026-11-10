@@ -29,3 +29,22 @@ test("window excludes late orders and spending stays separate by currency", () =
   assert.equal(report.journeys[0].spending.USD.after, 20);
   assert.equal(report.journeys[0].afterPeriodComplete, false);
 });
+
+test("revenue leader wins over higher order counts and updates after new sales", () => {
+  const events = [event("A", "2026-10-01", ["A"]), event("B", "2026-10-01", ["B"])];
+  const orders = [order("one", ["A"]), order("two", ["A"]), { ...order("three", ["B"]), total: 700 }];
+  assert.deepEqual(dashboard(events, [], 30, now).revenueLeaders, []);
+  assert.deepEqual(dashboard(events, orders, 30, now).revenueLeaders, [{ currency: "CAD", revenue: 700, events: [{ id: "B", name: "B" }] }]);
+  const updated = dashboard(events, [...orders, { ...order("four", ["A"]), total: 800 }], 30, now);
+  assert.deepEqual(updated.revenueLeaders, [{ currency: "CAD", revenue: 840, events: [{ id: "A", name: "A" }] }]);
+  assert.deepEqual(dashboard(events, orders, 7, now).revenueLeaders, []);
+});
+
+test("revenue ties are stable and currencies are never added together", () => {
+  const events = [event("B", "2026-10-01", ["B"]), event("A", "2026-10-01", ["A"])];
+  const orders = [order("one", ["A"]), order("two", ["B"]), { ...order("three", ["B"]), currency: "USD", total: 50 }];
+  assert.deepEqual(dashboard(events, orders, 30, now).revenueLeaders, [
+    { currency: "CAD", revenue: 20, events: [{ id: "A", name: "A" }, { id: "B", name: "B" }] },
+    { currency: "USD", revenue: 50, events: [{ id: "B", name: "B" }] },
+  ]);
+});

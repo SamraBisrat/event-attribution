@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { attendeeOrders } from "../customer-identity.server";
 import { eventInput } from "../event-input.server";
 import { updateEventRecord } from "../event-update.server";
 import { EventEditor } from "../components/EventEditor";
@@ -17,7 +18,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     where: { shop: session.shop }, orderBy: { startAt: "desc" },
     include: { attendees: { where: { customer: { shop: session.shop } }, include: { customer: true }, orderBy: { registeredAt: "asc" } } },
   });
-  const orders = await db.order.findMany({ where: { shop: session.shop }, select: { id: true, shopifyOrderId: true, customerId: true, discountCodes: true, orderDate: true, total: true, currency: true } });
+  const orders = await attendeeOrders(db, session.shop);
   return { events: events.map((event) => ({ ...event, codeOrders: orders.filter((order) => order.orderDate >= event.startAt && codes(order.discountCodes).some((code) => codes(event.discountCodes).includes(code))) })) };
 }
 
@@ -125,8 +126,8 @@ export default function Events() {
         {event.location && <p>Location: {event.location}</p>}
         <p>Linked codes: {codes(event.discountCodes).join(", ") || "None"}. <s-link href="/app/dashboard">Edit codes in dashboard</s-link></p>
         <h3>Attendee details</h3>
-        <p>The current import stores email and Shopify customer ID. Names and phone numbers are not currently stored.</p>
-        {!event.attendees.length ? <p>No attendees imported yet.</p> : <div style={{ overflowX: "auto" }}><table><thead><tr><th>Email</th><th>Shopify customer</th><th>Registered (UTC)</th><th>Attendance</th><th>Actions</th></tr></thead><tbody>{event.attendees.map((attendee) => <tr key={attendee.id}><td>{attendee.customer.email ?? "Not stored"}</td><td>{attendee.customer.shopifyCustomerId}</td><td>{new Date(attendee.registeredAt).toISOString()}</td><td>{attendee.attended ? "Attended" : "Registered"}</td><td>
+        <p>Attendees can be imported before they shop. Purchases are linked by matching email when orders sync.</p>
+        {!event.attendees.length ? <p>No attendees imported yet.</p> : <div style={{ overflowX: "auto" }}><table><thead><tr><th>Name</th><th>Email</th><th>Phone number</th><th>Shopify customer</th><th>Registered (UTC)</th><th>Attendance</th><th>Actions</th></tr></thead><tbody>{event.attendees.map((attendee) => <tr key={attendee.id}><td>{[attendee.customer.firstName, attendee.customer.lastName].filter(Boolean).join(" ") || "—"}</td><td>{attendee.customer.email ?? "Not stored"}</td><td>{attendee.customer.phone ?? "—"}</td><td>{attendee.customer.shopifyCustomerId ?? "Local attendee"}</td><td>{new Date(attendee.registeredAt).toISOString()}</td><td>{attendee.attended ? "Attended" : "Registered"}</td><td>
           <fetcher.Form method="post" onSubmit={(submission) => {
             submission.preventDefault();
             setRemoval({ intent: "removeAttendee", eventId: event.id, attendeeId: attendee.id, message: `Remove ${attendee.customer.email ?? "this attendee"} from “${event.name}”? Their customer record and other event registrations are kept. Reimporting their CSV row will add them again.` });

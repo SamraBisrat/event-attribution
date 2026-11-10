@@ -4,12 +4,7 @@ import { parse } from "csv-parse/sync";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 
-type CsvAttendee = {
-  "Event ID": string;
-  "First name": string;
-  "Last name": string;
-  Email: string;
-};
+import { importAttendees, type CsvAttendee } from "../import-attendees.server";
 
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -19,7 +14,7 @@ function jsonResponse(data: unknown, status = 200) {
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
-  const { admin, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   if (request.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
   const routeEventId = params.eventId;
 
@@ -91,155 +86,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return jsonResponse({ error: "Maximum 5,000 attendee rows per import" }, 400);
   }
 
-  const results = {
-    imported: 0,
-    alreadyRegistered: 0,
-    unmatched: [] as { row: number; email: string }[],
-    invalid: [] as { row: number; reason: string }[],
-    eventMismatch: [] as { row: number; eventId: string }[],
-  };
-
-  const validRows = rows.map((row, index) => ({
-    row,
-    line: index + 2,
-    eventId: (row["Event ID"] ?? "").trim(),
-    email: (row.Email ?? "").trim().toLowerCase(),
-  }));
-
-  for (const item of validRows) {
-    if (!item.eventId || !item.email) {
-      results.invalid.push({
-        row: item.line,
-        reason: "Event ID and Email are required",
-      });
-    } else if (item.eventId !== event.id) {
-      results.eventMismatch.push({
-        row: item.line,
-        eventId: item.eventId,
-      });
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item.email)) {
-      results.invalid.push({
-        row: item.line,
-        reason: "Invalid email address",
-      });
-    }
+  try {
+    const results = await importAttendees(db, session.shop, event.id, rows);
+    return jsonResponse({ eventId: event.id, ...results });
+  } catch {
+    return jsonResponse({ error: "Import could not be saved. No rows from this upload were saved. Please try again." }, 500);
   }
-
-  const eligibleRows = validRows.filter(
-    (item) =>
-      item.eventId === event.id &&
-      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item.email),
-  );
-
-  const emails = [...new Set(eligibleRows.map((item) => item.email))];
-  const customersByEmail = new Map<
-    string,
-    { id: string; email: string | null; shopifyCustomerId: string }
-  >();
-
-  for (const email of emails) {
-    const query = await admin.graphql(
-      `#graphql
-        query FindCustomerByEmail($query: String!) {
-          customers(first: 10, query: $query) {
-            nodes {
-              id
-              email
-            }
-          }
-        }`,
-      { variables: { query: `email:${JSON.stringify(email)}` } },
-    );
-
-    if (!query.ok) {
-      return jsonResponse(
-        { error: "Shopify customer lookup failed", detail: `HTTP ${query.status}` },
-        502,
-      );
-    }
-
-    const payload = await query.json() as {
-      errors?: { message: string }[];
-      data?: {
-        customers?: {
-          nodes: { id: string; email: string | null }[];
-        };
-      };
-    };
-
-    if (payload.errors?.length || !payload.data?.customers) {
-      return jsonResponse(
-        {
-          error: "Shopify customer lookup failed",
-          details: ["Check customer access permissions in Shopify, then try again."],
-        },
-        502,
-      );
-    }
-
-    const matches = payload.data.customers.nodes.filter(
-      (customer) => customer.email?.trim().toLowerCase() === email,
-    );
-
-    if (matches.length !== 1) {
-      continue;
-    }
-
-    const shopifyCustomer = matches[0];
-
-    const customer = await db.customer.upsert({
-      where: {
-        shop_shopifyCustomerId: {
-          shop: session.shop,
-          shopifyCustomerId: shopifyCustomer.id,
-        },
-      },
-      update: { email },
-      create: {
-        shop: session.shop,
-        shopifyCustomerId: shopifyCustomer.id,
-        email,
-      },
-    });
-
-    customersByEmail.set(email, customer);
-  }
-
-  for (const item of eligibleRows) {
-    const customer = customersByEmail.get(item.email);
-
-    if (!customer) {
-      results.unmatched.push({ row: item.line, email: item.email });
-      continue;
-    }
-
-    const existingRegistration = await db.eventAttendee.findUnique({
-  where: {
-    eventId_customerId: {
-      eventId: event.id,
-      customerId: customer.id,
-    },
-  },
-});
-
-if (existingRegistration) {
-  await db.eventAttendee.update({
-    where: { id: existingRegistration.id },
-    data: { attended: true },
-  });
-  results.alreadyRegistered++;
-} else {
-  await db.eventAttendee.create({
-    data: {
-      eventId: event.id,
-      customerId: customer.id,
-      attended: true,
-    },
-  });
-
-  results.imported++;
-}
-  }
-
-  return jsonResponse({ eventId: event.id, ...results });
 }

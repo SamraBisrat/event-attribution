@@ -67,8 +67,8 @@ export default function ImportAttendees() {
                 {events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}
               </select>
               <p>Download the template for this event, fill in your attendees, then upload it below.</p>
-              <a className="button-link" download="attendees-template.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(`Event ID,First name,Last name,Email\n${eventId},,,\n`)}`}>Download spreadsheet template</a>
-              <p>Required headers: Event ID, First name, Last name, Email. Maximum file size: 5 MB; maximum rows: 5,000.</p>
+              <a className="button-link" download="attendees-template.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(`Event ID,First name,Last name,Email,Phone number\n${eventId},,,,\n`)}`}>Download spreadsheet template</a>
+              <p>Required headers: Event ID, First name, Last name, Email. Optional: Phone number. An email is required for purchase matching; no Shopify account or prior purchase is needed. Maximum file size: 5 MB; maximum rows: 5,000.</p>
               <p><label htmlFor="file">Attendee CSV</label></p>
               <input id="file" name="file" type="file" accept=".csv,text/csv" required />
               <p><button type="submit">{busy ? "Importing…" : "Import attendees"}</button></p>
@@ -79,14 +79,12 @@ export default function ImportAttendees() {
           {result?.error ? <><p>{result.error}</p>{result.details?.map((detail, index) => <p key={index}>{detail}</p>)}</> : result && (
             <>
               <p>Import complete: {result.imported ?? 0} imported, {result.alreadyRegistered ?? 0} already registered.</p>
-              <p>{result.unmatched?.length ?? 0} unmatched emails; {result.invalid?.length ?? 0} invalid rows; {result.eventMismatch?.length ?? 0} rows for another event.</p>
-              {!!result.unmatched?.length && <p>Check that unmatched emails belong to customers in this store.</p>}
+              <p>{result.invalid?.length ?? 0} invalid rows; {result.eventMismatch?.length ?? 0} rows for another event.</p>
               <details><summary>Rows that need attention</summary><div className="table-scroll"><table><thead><tr><th>Spreadsheet row</th><th>Issue</th></tr></thead><tbody>
-                {result.unmatched?.map((item) => <tr key={`email-${item.row}`}><td>{item.row}</td><td>No customer found for {item.email}</td></tr>)}
                 {result.invalid?.map((item) => <tr key={`invalid-${item.row}`}><td>{item.row}</td><td>{item.reason}</td></tr>)}
                 {result.eventMismatch?.map((item) => <tr key={`event-${item.row}`}><td>{item.row}</td><td>This row belongs to another event. Use the template for your selected event.</td></tr>)}
               </tbody></table></div></details>
-              <p>All matched imported attendees are automatically confirmed as attended, including existing registrations.</p>
+              <p>All imported attendees are automatically confirmed as attended, including existing registrations.</p>
             </>
           )}
         </div>

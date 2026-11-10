@@ -64,7 +64,10 @@ model OrderSyncState {
 model Customer {
   id                 String   @id @default(cuid())
   shop               String
-  shopifyCustomerId  String
+  shopifyCustomerId  String?
+  firstName          String?
+  lastName           String?
+  phone              String?
   email              String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -93,6 +96,7 @@ model EventAttendee {
 
 //model for order
 model Order {
+  email String?
   discountCodes String @default("[]")
   id                String   @id @default(cuid())
   shop              String

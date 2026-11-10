@@ -1,6 +1,7 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { attendeeOrders } from "../customer-identity.server";
 import { summarizeAttribution } from "../attribution.server";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
@@ -18,16 +19,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     include: { attendees: { where: { customer: { shop: session.shop } } } },
   });
   if (!event) return Response.json({ error: "Event not found" }, { status: 404 });
-  const orders = await db.order.findMany({
-    where: {
-      shop: session.shop,
-      customerId: { in: event.attendees.filter((attendee) => attendee.attended).map((attendee) => attendee.customerId) },
-      orderDate: {
-        gte: event.startAt,
-        lt: new Date(event.startAt.getTime() + windowDays * 86400000),
-      },
-    },
-  });
+  const orders = await attendeeOrders(db, session.shop);
   return Response.json({
     eventId: event.id,
     eventName: event.name,

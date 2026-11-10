@@ -46,8 +46,17 @@ export function dashboard(events: EventRecord[], orders: OrderRecord[], windowDa
     }
     return { customerId, firstEvent: first.name, spending, afterPeriodComplete: now.getTime() >= first.startAt.getTime() + 90 * day };
   });
-  return { uniqueBuyers: acquired.size, uniqueAttendees: journeys.length, ambiguousOrders,
+  const revenueLeaders = [...new Set(rows.flatMap((row) => Object.keys(row.revenue)))].sort().flatMap((currency) => {
+    const amount = (row: typeof rows[number]) => Number((row.revenue[currency] ?? 0).toFixed(2));
+    const revenue = Math.max(0, ...rows.map(amount));
+    if (!revenue) return [];
+    const events = rows.filter((row) => amount(row) === revenue)
+      .map(({ id, name }) => ({ id, name }))
+      .sort((first, second) => first.name.localeCompare(second.name) || first.id.localeCompare(second.id));
+    return [{ currency, revenue, events }];
+  });
+  return { uniqueBuyers: acquired.size, uniqueAttendees: journeys.length, ambiguousOrders, revenueLeaders,
     rows: rows.map((row) => ({ ...row, attendees: row.attendees.size, buyers: row.buyers.size,
       conversion: row.attendees.size ? Math.round([...row.buyers].filter((buyer) => row.attendees.has(buyer)).length / row.attendees.size * 10000) / 100 : 0,
-    })).sort((first, second) => second.orders - first.orders), journeys };
+    })).sort((first, second) => second.orders - first.orders || first.name.localeCompare(second.name) || first.id.localeCompare(second.id)), journeys };
 }

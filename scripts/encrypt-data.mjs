@@ -8,7 +8,7 @@ const root = new URL("../", import.meta.url);
 if (process.env.DATABASE_URL !== "file:dev.sqlite") throw new Error("This maintenance script only supports the local dev.sqlite database. See SECURITY.md.");
 const db = new PrismaClient();
 try {
-  const rows = { Customer: await db.customer.findMany(), Session: await db.session.findMany() };
+  const rows = { Customer: await db.customer.findMany(), Session: await db.session.findMany(), Order: await db.order.findMany() };
   let key = process.env.APP_DATA_KEY;
   if (!key) {
     if (Object.entries(rows).some(([model, records]) => records.some((record) => protectedFields[model].some((field) => typeof record[field] === "string" && record[field].startsWith("enc:v1:"))))) throw new Error("Encrypted records exist. Restore the original APP_DATA_KEY; do not generate a replacement.");
@@ -36,7 +36,7 @@ try {
         if (value.startsWith("enc:v1:")) cipher.decrypt(value, `${model}.${field}`);
         else data[field] = cipher.encrypt(value, `${model}.${field}`);
       }
-      if (Object.keys(data).length) updates.push(db[model === "Customer" ? "customer" : "session"].update({ where: { id: record.id }, data }));
+      if (Object.keys(data).length) updates.push(db[{ Customer: "customer", Session: "session", Order: "order" }[model]].update({ where: { id: record.id }, data }));
     }
   }
   await db.$transaction(updates);

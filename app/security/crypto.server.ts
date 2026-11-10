@@ -33,6 +33,7 @@ export function dataCipher(encodedKey: string | undefined) {
 }
 
 export const protectedFields: Record<string, string[]> = {
-  Customer: ["email"],
+  Customer: ["email", "firstName", "lastName", "phone"],
+  Order: ["email"],
   Session: ["firstName", "lastName", "email", "accessToken", "refreshToken"],
 };

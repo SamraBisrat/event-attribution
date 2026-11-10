@@ -1,13 +1,13 @@
-type AttendanceEvent = { id: string; name: string; startAt: Date; endAt: Date | null; attendees: { attended: boolean; customerId: string; customer: { email: string | null; shopifyCustomerId: string } }[] };
+type AttendanceEvent = { id: string; name: string; startAt: Date; endAt: Date | null; attendees: { attended: boolean; customerId: string; customer: { email: string | null; shopifyCustomerId: string | null; firstName?: string | null; lastName?: string | null; phone?: string | null } }[] };
 type Sale = { id: string; shopifyOrderId: string; customerId: string | null; orderDate: Date; total: number; currency: string };
 export function attendeeSales(events: AttendanceEvent[], orders: Sale[], selectedId = "", now = new Date()) {
   const selected = selectedId ? events.filter((event) => event.id === selectedId) : events.filter((event) => (event.endAt ?? event.startAt) <= now);
-  const attendees = new Map<string, { customerId: string; email: string | null; reference: string; events: string[]; since: Date }>();
+  const attendees = new Map<string, { customerId: string; email: string | null; reference: string; name: string; phone: string | null; events: string[]; since: Date }>();
   for (const event of selected) for (const attendee of event.attendees) {
     if (!attendee.attended) continue;
     const existing = attendees.get(attendee.customerId);
     if (existing) { existing.events.push(event.name); if (event.startAt < existing.since) existing.since = event.startAt; }
-    else attendees.set(attendee.customerId, { customerId: attendee.customerId, email: attendee.customer.email, reference: attendee.customer.shopifyCustomerId, events: [event.name], since: event.startAt });
+    else attendees.set(attendee.customerId, { customerId: attendee.customerId, email: attendee.customer.email, reference: attendee.customer.shopifyCustomerId ?? attendee.customerId, name: [attendee.customer.firstName, attendee.customer.lastName].filter(Boolean).join(" "), phone: attendee.customer.phone ?? null, events: [event.name], since: event.startAt });
   }
   return [...attendees.values()].map((attendee) => {
     const seen = new Set<string>();

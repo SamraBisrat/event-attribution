@@ -2,6 +2,7 @@ import { Form, useFetcher, useLoaderData } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { attendeeOrders } from "../customer-identity.server";
 import { syncOrders } from "../sync-orders.server";
 import { attendeeSales } from "../attendee-sales";
 
@@ -10,7 +11,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const events = await db.event.findMany({ where: { shop: session.shop }, include: { attendees: { where: { customer: { shop: session.shop } }, include: { customer: true } } }, orderBy: { startAt: "desc" } });
   const requested = new URL(request.url).searchParams.get("eventId") ?? "";
   const selectedId = events.some((event) => event.id === requested) ? requested : "";
-  const orders = await db.order.findMany({ where: { shop: session.shop } });
+  const orders = await attendeeOrders(db, session.shop);
   const sync = await db.orderSyncState.findUnique({ where: { shop: session.shop } });
   return {
     events: events.map((event) => ({ id: event.id, name: event.name, startAt: event.startAt, location: event.location, past: (event.endAt ?? event.startAt) <= new Date(), confirmed: event.attendees.filter((attendee) => attendee.attended).length })),
@@ -47,7 +48,7 @@ export default function Attendance() {
       <p>Purchases shown since {selectedId ? "this event began" : "each person’s first past event"}, with no end-date cutoff. Each order is counted once per person in this view; totals across separate event views may overlap.</p>
       <p>{sync?.fullHistory ? "Full-history access is enabled." : "Recent order history only. Older purchases may be missing; full history requires Shopify’s read_all_orders permission."}</p>
       {fetcher.data && <p role="status">{String("error" in fetcher.data ? fetcher.data.error : fetcher.data.message)}</p>}
-      {!rows.length ? <p>No confirmed attendees in this view. <s-link href="/app/import">Add attendees</s-link> or select another event.</p> : <div className="table-scroll"><table><thead><tr><th scope="col">Attendee</th><th scope="col">Event attended</th><th scope="col">Orders made</th><th scope="col">Revenue</th></tr></thead><tbody>{rows.map((row) => <tr key={row.customerId}><td>{row.email ?? `Customer ${row.reference.split("/").pop()}`}</td><td>{row.events.join(", ")}</td><td>{row.purchases.length ? <details><summary>{row.purchases.length} orders</summary><ul>{row.purchases.map((order) => <li key={order.id}>Order {order.id.split("/").pop()} · {new Date(order.date).toISOString().slice(0, 10)} · {order.total.toFixed(2)} {order.currency}</li>)}</ul></details> : "0"}</td><td>{Object.entries(row.revenue).map(([currency, total]) => `${total.toFixed(2)} ${currency}`).join(" · ") || "—"}</td></tr>)}</tbody></table></div>}
+      {!rows.length ? <p>No confirmed attendees in this view. <s-link href="/app/import">Add attendees</s-link> or select another event.</p> : <div className="table-scroll"><table><thead><tr><th scope="col">Attendee</th><th scope="col">Event attended</th><th scope="col">Orders made</th><th scope="col">Revenue</th></tr></thead><tbody>{rows.map((row) => <tr key={row.customerId}><td>{row.name && <strong>{row.name}<br /></strong>}{row.email ?? `Attendee ${row.reference.split("/").pop()}`}{row.phone && <><br /><small>{row.phone}</small></>}</td><td>{row.events.join(", ")}</td><td>{row.purchases.length ? <details><summary>{row.purchases.length} orders</summary><ul>{row.purchases.map((order) => <li key={order.id}>Order {order.id.split("/").pop()} · {new Date(order.date).toISOString().slice(0, 10)} · {order.total.toFixed(2)} {order.currency}</li>)}</ul></details> : "0"}</td><td>{Object.entries(row.revenue).map(([currency, total]) => `${total.toFixed(2)} ${currency}`).join(" · ") || "—"}</td></tr>)}</tbody></table></div>}
     </s-section>
   </s-page>;
 }

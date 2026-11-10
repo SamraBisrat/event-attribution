@@ -2,7 +2,8 @@ export type RemoteOrder = {
   id: string;
   discountCodes?: string[];
   createdAt: string;
-  customer: { id: string } | null;
+  email?: string | null;
+  customer: { id: string; defaultEmailAddress?: { emailAddress: string } | null } | null;
   cancelledAt: string | null;
   test: boolean;
   displayFinancialStatus: string;
@@ -29,8 +30,8 @@ export const ordersQuery = `#graphql
   query SyncOrders($after: String, $query: String!) {
     orders(first: 100, after: $after, query: $query, sortKey: UPDATED_AT) {
       nodes {
-        id createdAt cancelledAt test displayFinancialStatus discountCodes
-        customer { id }
+        id email createdAt cancelledAt test displayFinancialStatus discountCodes
+        customer { id defaultEmailAddress { emailAddress } }
         currentTotalPriceSet { shopMoney { amount currencyCode } }
       }
       pageInfo { hasNextPage endCursor }

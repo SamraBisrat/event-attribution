@@ -2,6 +2,7 @@ import { Form, useFetcher, useLoaderData } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { attendeeOrders } from "../customer-identity.server";
 import { dashboard } from "../dashboard.server";
 import { dashboardCsv } from "../dashboard-csv";
 import { useState } from "react";
@@ -13,7 +14,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const requested = Number(new URL(request.url).searchParams.get("windowDays") ?? 30);
   const windowDays = [7, 30, 60, 90].includes(requested) ? requested : 30;
   const events = await db.event.findMany({ where: { shop: session.shop }, include: { attendees: { where: { customer: { shop: session.shop } } } } });
-  const orders = await db.order.findMany({ where: { shop: session.shop } });
+  const orders = await attendeeOrders(db, session.shop);
   const customers = await db.customer.findMany({ where: { shop: session.shop }, select: { id: true, email: true } });
   return { report: dashboard(events, orders, windowDays), windowDays, customers };
 }
@@ -59,7 +60,14 @@ export default function Dashboard() {
         <article className="metric-card metric-highlight"><span>Attributed revenue</span><strong>{money(revenue)}</strong><small>Currencies shown separately</small></article>
         <article className="metric-card"><span>Orders using event codes</span><strong>{codeOrders}</strong><small>{totalOrders ? Math.round(codeOrders / totalOrders * 100) : 0}% of attributed orders</small></article>
       </div>
-      <div className="dashboard-highlights"><article><h3>Leading event</h3><strong>{report.rows[0]?.orders ? report.rows[0].name : "Waiting for purchases"}</strong><p>{report.rows[0]?.orders ? `${report.rows[0].orders} attributed orders · ranked by purchases` : "Update orders to start seeing event performance."}</p></article><article><h3>New customer acquisition</h3><strong>Not yet verified</strong><p>Full purchase history is needed to distinguish first-time buyers from returning customers.</p></article></div>
+      <div className="dashboard-highlights"><article>
+        <h3>{report.revenueLeaders.length > 1 ? "Leading events by currency" : report.revenueLeaders[0]?.events.length > 1 ? "Joint leading events" : "Leading event"}</h3>
+        {!report.revenueLeaders.length ? <><strong>Waiting for purchases</strong><p>Update orders to start seeing event performance.</p></> : report.revenueLeaders.map((leader) => <div key={leader.currency}>
+          {leader.events.length === 1 ? <strong>{leader.events[0].name}</strong> : <><strong>{leader.events.length} events tied</strong><ul>{leader.events.map((event) => <li key={event.id}>{event.name}</li>)}</ul></>}
+          <p>{money({ [leader.currency]: leader.revenue })} attributed revenue{leader.events.length > 1 ? " each" : ""} · {windowDays}-day purchase window</p>
+        </div>)}
+        <small>Ranked by attributed revenue across all events. Different currencies are compared separately.</small>
+      </article><article><h3>New customer acquisition</h3><strong>Not yet verified</strong><p>Full purchase history is needed to distinguish first-time buyers from returning customers.</p></article></div>
       <p>Orders refresh automatically while the app is open. See Attendance &amp; Orders for the last successful update and history coverage. Older events and before/after comparisons may be incomplete.</p>
       <p>{report.ambiguousOrders} orders excluded because their codes match multiple events. Code matches take priority; otherwise the most recent attended event receives credit. Each order is counted once.</p>
     </s-section>
