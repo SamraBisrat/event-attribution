@@ -1,0 +1,2 @@
+ALTER TABLE "Event" ADD COLUMN "discountCodes" TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE "Order" ADD COLUMN "discountCodes" TEXT NOT NULL DEFAULT '[]';

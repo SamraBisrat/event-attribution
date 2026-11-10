@@ -2,9 +2,19 @@ import { PassThrough } from "stream";
 import { renderToPipeableStream } from "react-dom/server";
 import { ServerRouter } from "react-router";
 import { createReadableStreamFromReadable } from "@react-router/node";
-import { type EntryContext } from "react-router";
+import type { EntryContext, HandleDataRequestFunction, HandleErrorFunction } from "react-router";
 import { isbot } from "isbot";
 import { addDocumentResponseHeaders } from "./shopify.server";
+import { protectResponse } from "./security/headers.server";
+
+export const handleDataRequest: HandleDataRequestFunction = (response) => {
+  protectResponse(response.headers);
+  return response;
+};
+
+export const handleError: HandleErrorFunction = () => {
+  console.error("Request failed. Sensitive request and database details were omitted.");
+};
 
 export const streamTimeout = 5000;
 
@@ -15,6 +25,7 @@ export default async function handleRequest(
   reactRouterContext: EntryContext
 ) {
   addDocumentResponseHeaders(request, responseHeaders);
+  protectResponse(responseHeaders);
   const userAgent = request.headers.get("user-agent");
   const callbackName = isbot(userAgent ?? '')
     ? "onAllReady"
@@ -43,9 +54,9 @@ export default async function handleRequest(
         onShellError(error) {
           reject(error);
         },
-        onError(error) {
+        onError() {
           responseStatusCode = 500;
-          console.error(error);
+          console.error("Rendering failed. Sensitive details were omitted.");
         },
       }
     );

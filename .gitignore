@@ -15,6 +15,9 @@ database.sqlite
 
 .env
 .env.*
+.security-backups/
+*.sqlite-wal
+*.sqlite-shm
 
 
 

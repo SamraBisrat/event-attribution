@@ -10,7 +10,7 @@ generator client {
 // See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
 datasource db {
   provider = "sqlite"
-  url      = "file:dev.sqlite"
+  url      = env("DATABASE_URL")
 }
 
 model Session {
@@ -36,6 +36,8 @@ model Session {
 //model for event
 
 model Event {
+  location String?
+  discountCodes String @default("[]")
   id          String   @id @default(cuid())
   shop        String
   name        String
@@ -49,6 +51,12 @@ model Event {
 
   attendees   EventAttendee[]
   attributions Attribution[]
+}
+
+model OrderSyncState {
+  shop String @id
+  lastSuccessAt DateTime
+  fullHistory Boolean @default(false)
 }
 
 //model for customer
@@ -85,6 +93,7 @@ model EventAttendee {
 
 //model for order
 model Order {
+  discountCodes String @default("[]")
   id                String   @id @default(cuid())
   shop              String
   shopifyOrderId    String
